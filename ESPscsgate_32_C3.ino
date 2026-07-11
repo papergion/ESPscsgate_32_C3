@@ -35,7 +35,7 @@ const int pinLed = 8;
 //        ---- attenzione - porta http: 8080 <--se alexaParam=y--------------
 
 // SCS WARNING - LA PUBBLICAZIONE AVVIENE SOLO SE PRIMA E' PERVENUTO UN /cmd qualunque da mqtt !!!!!!!!!!!!!!!
-//        finchè non invia un comando che inizia con: '§'  
+//        finchè non invia un comando che inizia con: PIC_REQ  
 
 //----------------------------------------------------------------------------------
 // 
@@ -153,6 +153,7 @@ const int pinLed = 8;
     server.on ( "/scan", handleScan);               // query connessione <- solo in modalita CLIENT
     server.on ("/test", handleTest);                // pagina html/js di test
     server.on ("/status", handleStatus);            // status display
+    server.on ("/help", handleHelp);                // help display
     server.on ("/picprog", handlePicProg);          // verify / start PIC firmware programming
     server.on ("/setting", handleSetting);          // setup wifi client
     server.on ("/reset", handleReset);              // reset app  ?device= <esp>|<pic>
@@ -2903,6 +2904,138 @@ void handleStatus()
   server.send(200, "text/html", content);
   content = "";
 }
+
+void udpTrace(String  data)
+{
+  if ((udpopen == 1) && (udp_remote_ip))
+  {
+    int success;
+    do  {
+      success =  udpConnection.beginPacket(udp_remote_ip, udp_remote_port);
+    }   while (!success);
+
+    const char*  datastr = data.c_str();
+    int n = 0;
+    while (n < data.length())
+    {
+      udpConnection.write(datastr[n++]);     // UDP reply
+    }
+    success = udpConnection.endPacket();
+  } // udp_remote_ip
+}
+// =============================================================================================
+void handleHelp()
+{
+//  if (firstTime == 0) setFirst();
+  char temp[255];
+  int bytesread = 1;
+
+  String trace = server.arg("trace");
+
+  content = "<!DOCTYPE HTML>\r\n<html>Hello from ESP32_" _MODO "GATE " _FW_VERSION;
+
+//**************************************************** */
+  server.setContentLength(CONTENT_LENGTH_UNKNOWN);
+  server.send(200, "text/html",content);
+  if (trace == "Y")
+  {
+    udpTrace(content);
+  }
+  content = "";
+//**************************************************** */
+
+  content += " at ";
+  
+  content += WiFi.localIP().toString();
+  content += "<p><ul>";
+
+  if (connectionType == 1) // web server AP
+  {
+    Serial1.write('@');   // set led lamps
+    Serial1.write(0xF2);  // set led lamps high-freq (AP mode)
+    content += "<li>";
+    content += "Working as AP ";
+    content += "</li>";
+  }
+  else
+  {
+    Serial1.write('@');   // set led lamps
+    Serial1.write(0xF1);  // set led lamps std-freq (client mode)
+    content += "<li>";
+    content += "System frequency (Mhz): ";
+    unsigned char frq = ESP.getCpuFreqMHz(); // returns the CPU frequency in MHz as an unsigned 8-bit integer
+    content += String(frq);
+    content += "</li>";
+
+    content += "<li>";
+    content += "Wifi connection ssid: ";
+    char hBuffer[64];
+    sprintf(hBuffer, "%s - Ch:%d - (%ddBm)", WiFi.SSID().c_str(), WiFi.channel(), WiFi.RSSI());
+    content += hBuffer;
+    content += "</li>";
+
+    content += "<li>";
+    content += "Router IP: ";
+    content += WiFi.gatewayIP().toString();
+    content += "</li>";
+  }
+  content += "<li>---------PIC---------------</li>";
+
+//**************************************************** */
+  server.sendContent(content);
+  if (trace == "Y")
+  {
+    udpTrace(content);
+  }
+  content = "";
+//**************************************************** */
+
+  String param = server.arg("type");
+
+// @QH
+  Serial1.write(PIC_REQ);    // command mode 
+  Serial1.write('Q');    // command: query 
+  if (param == "L")
+     Serial1.write('L');    // query PIC fw version
+  else
+     Serial1.write('H');    // query PIC fw version
+
+  delay(5);            // wait 20ms
+  char nrs = 0;
+
+//  Serial1.setTimeout(10);  // set timeout to 10 mS
+  //while (Serial1.available() && (nrs < 80))
+//  while (Serial1.available() && (bytesread> 0))
+//  while (bytesread> 0)
+  while (nrs < 35)
+  {
+    temp[0] = '\0';
+    bytesread = Serial1.readBytesUntil('\n', temp, 255);        // receive from serial USB
+    if (bytesread > 1)
+    {
+      temp[bytesread] = '\0';
+      content += "<li>";
+      content += temp;
+      content += "</li>";
+    }
+//    delayMicroseconds(INNERWAIT);
+    delay(2);            // wait 2ms
+    nrs++;
+  }
+  content += "</ul></p>";
+  content += "</form></html>";
+
+  //**************************************************** */
+  server.sendContent(content);
+  server.sendContent("");
+  if (trace == "Y")
+  {
+    udpTrace(content);
+  }
+  content = "";
+  //**************************************************** */
+
+}
 // =============================================================================================
 #ifdef FFS
 void handlePicProg(void)          // verify / start PIC firmware programming
@@ -3022,6 +3155,7 @@ void createWebServer(int webtype)
   server.on ("/setting", handleSetting);          // setup wifi client
   server.on ("/reset", handleReset);              // reset app
   server.on ("/status", handleStatus);            // status app
+  server.on ("/help", handleHelp);                // help display
 #ifdef FFS
   server.on ("/picprog", handlePicProg);          // verify / start PIC firmware programming
 #endif
@@ -5417,7 +5551,7 @@ if (sm_picprog == PICPROG_FREE)
 
     char devx = 0;
     char device;
-    if ((replyBuffer[4] == 0x30) && (replyBuffer[2] == 0xB4))  // <-termostato----------------------------
+    if ((replyBuffer[4] == 0x30) && ((replyBuffer[2] == 0xB4) || (replyBuffer[2] == 0xB5)))  // <-termostato----------------------------
     {
         device = replyBuffer[3];  
         devtype = 15;
@@ -5430,7 +5564,10 @@ if (sm_picprog == PICPROG_FREE)
         topic += nomeDevice;
 
         char actionc[5];
-        sprintf(actionc, "%03u", replyBuffer[5]); 
+        if (replyBuffer[2] == 0xB5)
+          sprintf(actionc, "%03u", (255 + replyBuffer[5])); 
+        else
+          sprintf(actionc, "%03u", replyBuffer[5]); 
         actionc[4]=0;
         actionc[3]= actionc[2];
         actionc[2]=',';
