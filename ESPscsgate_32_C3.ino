@@ -1,6 +1,6 @@
 //---------------------------------------------------------------------------------------------------------
 #define _FW_NAME     "SCSGATE_32"
-#define _FW_VERSION  "VER_7.003 "
+#define _FW_VERSION  "VER_7.004 "
 #define _ESP_CORE    "esp32-2.5.2"
 // ========================================================================================================
 // ========================================================================================================
@@ -297,6 +297,7 @@ unsigned int http_port = 80;
 #define     GENERIC_TO   MYPFX "/generic/to/"
 #define NEW_GENERIC_TO    "\",\"to_topic\": \"" GENERIC_FROM
 
+#define NEW_UNIQUE_ID "\",\"unique_id\": \"scsgate_"
 #define NEW_DEVICE_END   "\"}";
 // =======================================================================================================================
 #include "fauxmoESP.h"
@@ -1457,8 +1458,8 @@ char  MQTTnewdiscover(char devtype, char * addrDevice, String nomeDevice)
     payload += NEW_SWITCH_SET;
     payload += addrDevice;
     payload += NEW_SWITCH_STATE;
-    payload += addrDevice;
-    payload += NEW_DEVICE_END;
+//    payload += addrDevice;
+//    payload += NEW_DEVICE_END;
   }
   else if ((devtype == 3) || (devtype == 4)) // D=define new device DIMMER <<<-----------------------------------------------
   {
@@ -1476,8 +1477,8 @@ char  MQTTnewdiscover(char devtype, char * addrDevice, String nomeDevice)
     payload += NEW_BRIGHT_SET;
     payload += addrDevice;
     payload += NEW_BRIGHT_STATE;
-    payload += addrDevice;
-    payload += NEW_DEVICE_END;
+//    payload += addrDevice;
+//    payload += NEW_DEVICE_END;
   }
   else if ((devtype == 8) || (devtype == 18)) // D=define new device COVER <<<-----------------------------------------------
   {
@@ -1491,8 +1492,8 @@ char  MQTTnewdiscover(char devtype, char * addrDevice, String nomeDevice)
     payload += NEW_COVER_SET;
     payload += addrDevice;
     payload += NEW_COVER_STATE;
-    payload += addrDevice;
-    payload += NEW_DEVICE_END;
+//    payload += addrDevice;
+//    payload += NEW_DEVICE_END;
   }
   else if (devtype == 11) // D=define new device GENERIC <<<-----------------------------------------------
   {
@@ -1508,8 +1509,8 @@ char  MQTTnewdiscover(char devtype, char * addrDevice, String nomeDevice)
     payload += NEW_GENERIC_FROM;
     payload += addrDevice;
     payload += NEW_GENERIC_TO;
-    payload += addrDevice;
-    payload += NEW_DEVICE_END;
+//    payload += addrDevice;
+//    payload += NEW_DEVICE_END;
   }
   else if ((devtype == 9) || (devtype == 19)) // D=define new device COVER PCT<<<-----------------------------------------------
   {
@@ -1527,14 +1528,18 @@ char  MQTTnewdiscover(char devtype, char * addrDevice, String nomeDevice)
     ///      payload += NEW_COVER_STATE;  // cover percentuale, meglio non trattare lo stato
     ///      payload += addrDevice;       //                    ma solo la posizione
     payload += NEW_COVERPCT_STATE;
-    payload += addrDevice;
-    payload += NEW_DEVICE_END;
+//    payload += addrDevice;
+//    payload += NEW_DEVICE_END;
   }
   else if (devtype == 14) // 0x0E) // D=define new device ALARM BOARD<<<-----------------------------------------------
   {
   }
   if (rc == 1)
   {
+    payload += addrDevice;
+    payload += NEW_UNIQUE_ID;
+    payload += addrDevice;
+    payload += NEW_DEVICE_END;
     const char* cPayload = payload.c_str();
     const char* cTopic = topic.c_str();
     client.publish(cTopic, cPayload, false);
@@ -3731,6 +3736,7 @@ void setup() {
 #endif
 
 //  Serial1.setPins(RX1, TX1);
+  Serial1.setRxBufferSize(1024);
   Serial1.begin(115200, SERIAL_8N2, 20, 21);
 //  Serial.setHwFlowCtrlMode(HW_FLOWCTRL_DISABLE);
 
